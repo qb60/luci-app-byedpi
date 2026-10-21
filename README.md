@@ -107,7 +107,8 @@ OpenWrt 25.12:
 apk del luci-app-byedpi byedpi
 ```
 
-## Для разработчиков
+## Ссылки
 
-[Сборка пакета и выпуск релизов](docs/releases.md) ·
-[Устройство реализации и проверки](docs/implementation.md)
+byedpi: https://github.com/hufrea/byedpi
+byedpi для OpenWRT: https://github.com/DPITrickster/ByeDPI-OpenWrt
+byedpi для Android с подбором стратегий: https://github.com/romanvht/ByeByeDPI

@@ -1,0 +1,64 @@
+name: Build OpenWrt packages
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install test shell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y busybox
+      - name: Check shell syntax and release logic
+        run: |
+          bash -n scripts/build-package.sh
+          busybox ash -n scripts/install.sh
+          busybox ash -n luci-app-byedpi/root/usr/libexec/rpcd/luci.byedpi
+          python3 tests/release.py
+      - name: Check frontend logic
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+
+          globalThis.std = { loadFile: path => readFileSync(path, 'utf8') };
+          const tests = readFileSync('tests/frontend.js').toString('base64');
+          await import(`data:text/javascript;base64,${tests}`);
+          JS
+
+  build:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        family: ['24.10', '25.12']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install SDK host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison gawk gettext \
+            git libncurses-dev libssl-dev libelf-dev zlib1g-dev python3-dev \
+            python3-setuptools rsync swig unzip \
+            file wget curl zstd
+      - name: Build LuCI package
+        env:
+          OPENWRT_FAMILY: ${{ matrix.family }}
+        run: bash scripts/build-package.sh "$OPENWRT_FAMILY" "$GITHUB_WORKSPACE/artifacts"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: packages-${{ matrix.family }}
+          overwrite: true
+          path: artifacts/*
+          if-no-files-found: error

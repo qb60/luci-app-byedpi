@@ -1,0 +1,289 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Advanced Settings"
+msgstr ""
+
+msgid "Another ByeDPI operation is in progress. Try again."
+msgstr ""
+
+msgid "Apply or revert pending ByeDPI UCI changes before opening the file editor."
+msgstr ""
+
+msgid "Apply or revert pending ByeDPI changes before opening the file editor."
+msgstr ""
+
+msgid "Arguments passed directly to ciadpi. When set, individual settings are ignored for all instances. Shell quoting is not interpreted by the init script."
+msgstr ""
+
+msgid "Automatic mode"
+msgstr ""
+
+msgid "Automatic mode triggers"
+msgstr ""
+
+msgid "Autostart"
+msgstr ""
+
+msgid "Buffer size"
+msgstr ""
+
+msgid "ByeDPI"
+msgstr ""
+
+msgid "ByeDPI Settings"
+msgstr ""
+
+msgid "ByeDPI did not start. Check enabled sections, command-line options and the system log."
+msgstr ""
+
+msgid "Cache TTL"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Configuration saved. Restart ByeDPI on the Service tab to use the new configuration."
+msgstr ""
+
+msgid "Custom command-line options"
+msgstr ""
+
+msgid "Custom command-line options are active. Individual settings below are ignored."
+msgstr ""
+
+msgid "Debug"
+msgstr ""
+
+msgid "Default TTL"
+msgstr ""
+
+msgid "Disable UDP"
+msgstr ""
+
+msgid "Disable domain names"
+msgstr ""
+
+msgid "Disabled"
+msgstr ""
+
+msgid "Disorder position"
+msgstr ""
+
+msgid "Disordered out-of-band position"
+msgstr ""
+
+msgid "Drop SACK"
+msgstr ""
+
+msgid "Edit configuration file"
+msgstr ""
+
+msgid "Enable this configuration"
+msgstr ""
+
+msgid "Enabled"
+msgstr ""
+
+msgid "Fake SNI names"
+msgstr ""
+
+msgid "Fake TLS modifications"
+msgstr ""
+
+msgid "Fake UDP packets"
+msgstr ""
+
+msgid "Fake data"
+msgstr ""
+
+msgid "Fake packet TTL"
+msgstr ""
+
+msgid "Fake packet offset"
+msgstr ""
+
+msgid "Fake packet position"
+msgstr ""
+
+msgid "HTTP modifications"
+msgstr ""
+
+msgid "Hosts"
+msgstr ""
+
+msgid "IP set"
+msgstr ""
+
+msgid "Invalid UCI syntax. The existing configuration was not changed."
+msgstr ""
+
+msgid "Invalid request."
+msgstr ""
+
+msgid "Listen Address"
+msgstr ""
+
+msgid "Listen Port"
+msgstr ""
+
+msgid "Listen address"
+msgstr ""
+
+msgid "Listen port"
+msgstr ""
+
+msgid "Manage ByeDPI"
+msgstr ""
+
+msgid "Maximum connections"
+msgstr ""
+
+msgid "Missing configuration revision. Reopen the editor."
+msgstr ""
+
+msgid "Operation completed."
+msgstr ""
+
+msgid "Out-of-band data"
+msgstr ""
+
+msgid "Out-of-band position"
+msgstr ""
+
+msgid "Outgoing address"
+msgstr ""
+
+msgid "PID file"
+msgstr ""
+
+msgid "Pending ByeDPI UCI changes appeared during validation. Apply or revert them first."
+msgstr ""
+
+msgid "Pending ByeDPI UCI changes exist. Apply or revert them first."
+msgstr ""
+
+msgid "Port filter"
+msgstr ""
+
+msgid "Protocols"
+msgstr ""
+
+msgid "Restart"
+msgstr ""
+
+msgid "Round filter"
+msgstr ""
+
+msgid "Running"
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Save or reset the form before opening the file editor."
+msgstr ""
+
+msgid "Service"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Split positions"
+msgstr ""
+
+msgid "Start"
+msgstr ""
+
+msgid "Start on boot"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid "Stop"
+msgstr ""
+
+msgid "Stopped"
+msgstr ""
+
+msgid "TCP Fast Open"
+msgstr ""
+
+msgid "TCP MD5 signature"
+msgstr ""
+
+msgid "TLS record split positions"
+msgstr ""
+
+msgid "The ByeDPI RPC request failed."
+msgstr ""
+
+msgid "The ByeDPI init script failed. Check the system log."
+msgstr ""
+
+msgid "The byedpi main section is missing. Use the file editor to add: config byedpi 'main'."
+msgstr ""
+
+msgid "The configuration changed after the editor was opened. Copy your edits, cancel and reopen it."
+msgstr ""
+
+msgid "The configuration changed during validation. Reopen the editor."
+msgstr ""
+
+msgid "The configuration is missing or is a symbolic link."
+msgstr ""
+
+msgid "The configuration is too large (64 KiB maximum)."
+msgstr ""
+
+msgid "The configuration is too large for this editor (64 KiB maximum)."
+msgstr ""
+
+msgid "Timeout"
+msgstr ""
+
+msgid "Transparent proxy"
+msgstr ""
+
+msgid "Unable to create a temporary directory."
+msgstr ""
+
+msgid "Unable to load the ByeDPI configuration."
+msgstr ""
+
+msgid "Unable to prepare UCI validation."
+msgstr ""
+
+msgid "Unable to preserve configuration permissions."
+msgstr ""
+
+msgid "Unable to query procd."
+msgstr ""
+
+msgid "Unable to read the configuration."
+msgstr ""
+
+msgid "Unable to replace the configuration."
+msgstr ""
+
+msgid "Unable to write the temporary configuration."
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
+msgid "Unsupported RPC method."
+msgstr ""
+
+msgid "Unsupported service action."
+msgstr ""
+
+msgid "Version"
+msgstr ""
+
+msgid "Working…"
+msgstr ""

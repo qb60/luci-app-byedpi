@@ -1,0 +1,175 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# rpcd executable plugin. All paths and executable names are server controlled.
+. /usr/share/libubox/jshn.sh
+
+CONFIG_FILE=/etc/config/byedpi
+LOCK_DIRECTORY=/var/lock/luci-byedpi.lock
+temporary_directory=
+lock_acquired=
+
+cleanup() {
+	[ -z "$temporary_directory" ] || rm -rf "$temporary_directory"
+	[ -z "$lock_acquired" ] || rmdir "$LOCK_DIRECTORY"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
+fail() {
+	json_init
+	json_add_boolean ok 0
+	json_add_string error "$1"
+	json_dump
+	exit 0
+}
+
+acquire_lock() {
+	mkdir "$LOCK_DIRECTORY" 2>/dev/null || fail 'Another ByeDPI operation is in progress. Try again.'
+	lock_acquired=1
+}
+
+configuration_revision() {
+	sha256sum "$CONFIG_FILE" | cut -d ' ' -f 1
+}
+
+has_pending_uci_changes() {
+	# rpcd keeps per-session UCI deltas here on supported OpenWrt releases.
+	for delta in /tmp/.uci/byedpi /var/run/rpcd/uci-*/byedpi /tmp/run/rpcd/uci-*/byedpi; do
+		[ ! -s "$delta" ] || return 0
+	done
+	return 1
+}
+
+get_status() {
+	service_state="$(ubus call service list '{"name":"byedpi"}' 2>/dev/null)" || fail 'Unable to query procd.'
+	autostart=0
+	/etc/init.d/byedpi enabled >/dev/null 2>&1 && autostart=1
+	version=
+
+	if command -v apk >/dev/null 2>&1; then
+		if apk info -e byedpi >/dev/null 2>&1; then
+			version="$(apk info -v byedpi 2>/dev/null | sed -n 's/^byedpi-//p' | head -n 1)"
+		fi
+	elif command -v opkg >/dev/null 2>&1; then
+		version="$(opkg status byedpi 2>/dev/null | sed -n 's/^Version: //p' | head -n 1)"
+	fi
+	. /lib/functions.sh
+	config_load byedpi || fail 'Unable to load the ByeDPI configuration.'
+	config_get command_options main cmd_opts
+	config_get listen_address main ip
+	config_get listen_port main port
+
+	json_init
+	json_add_boolean ok 1
+	json_add_string service "$service_state"
+	json_add_boolean autostart "$autostart"
+	json_add_string version "$version"
+	json_add_string cmd_opts "$command_options"
+	json_add_string ip "$listen_address"
+	json_add_string port "$listen_port"
+	json_add_array configured
+	add_configured() {
+		local enabled listen_ip listen_port
+		config_get_bool enabled "$1" enabled 0
+		[ "$enabled" = 1 ] || return 0
+		config_get listen_ip "$1" ip
+		config_get listen_port "$1" port
+		json_add_object ''
+		json_add_string ip "$listen_ip"
+		json_add_string port "$listen_port"
+		json_close_object
+	}
+	config_foreach add_configured byedpi
+	json_close_array
+	json_dump
+}
+
+run_service_action() {
+	json_get_var service_action action
+	case "$service_action" in
+		start|stop|restart|enable|disable) ;;
+		*) fail 'Unsupported service action.' ;;
+	esac
+
+	acquire_lock
+	/etc/init.d/byedpi "$service_action" >/dev/null 2>&1 || fail 'The ByeDPI init script failed. Check the system log.'
+	case "$service_action" in
+		start|restart)
+			sleep 1
+			running="$(ubus call service list '{"name":"byedpi"}' 2>/dev/null | jsonfilter -e '@.byedpi.instances.*.running')"
+			printf '%s\n' "$running" | grep -qx true || fail 'ByeDPI did not start. Check enabled sections, command-line options and the system log.'
+			;;
+	esac
+
+	json_init
+	json_add_boolean ok 1
+	json_dump
+}
+
+read_configuration() {
+	[ -f "$CONFIG_FILE" ] && [ ! -L "$CONFIG_FILE" ] || fail 'The configuration is missing or is a symbolic link.'
+	has_pending_uci_changes && fail 'Apply or revert pending ByeDPI UCI changes before opening the file editor.'
+
+	# The sentinel preserves trailing newlines in shell command substitution.
+	content="$(cat "$CONFIG_FILE" && printf '.')" || fail 'Unable to read the configuration.'
+	content=${content%.}
+	[ "${#content}" -le 65536 ] || fail 'The configuration is too large for this editor (64 KiB maximum).'
+	expected_revision="$(printf '%s' "$content" | sha256sum | cut -d ' ' -f 1)"
+
+	json_init
+	json_add_boolean ok 1
+	json_add_string content "$content"
+	json_add_string revision "$expected_revision"
+	json_dump
+}
+
+write_configuration() {
+	json_get_var content content
+	json_get_var expected_revision revision
+	[ "${#content}" -le 65536 ] || fail 'The configuration is too large (64 KiB maximum).'
+	[ "${#expected_revision}" -eq 64 ] || fail 'Missing configuration revision. Reopen the editor.'
+
+	acquire_lock
+	[ -f "$CONFIG_FILE" ] && [ ! -L "$CONFIG_FILE" ] || fail 'The configuration is missing or is a symbolic link.'
+	has_pending_uci_changes && fail 'Pending ByeDPI UCI changes exist. Apply or revert them first.'
+	[ "$(configuration_revision)" = "$expected_revision" ] || fail 'The configuration changed after the editor was opened. Copy your edits, cancel and reopen it.'
+	umask 077
+	temporary_directory="$(mktemp -d /etc/config/.byedpi-luci.XXXXXX)" || fail 'Unable to create a temporary directory.'
+	mkdir "$temporary_directory/delta" || fail 'Unable to prepare UCI validation.'
+	cp -p "$CONFIG_FILE" "$temporary_directory/byedpi" || fail 'Unable to preserve configuration permissions.'
+	printf '%s' "$content" > "$temporary_directory/byedpi" || fail 'Unable to write the temporary configuration.'
+
+	# Strict parsing, isolated from both the live configuration and UCI deltas.
+	uci -c "$temporary_directory" -t "$temporary_directory/delta" export byedpi >/dev/null 2>&1 || fail 'Invalid UCI syntax. The existing configuration was not changed.'
+	[ "$(configuration_revision)" = "$expected_revision" ] || fail 'The configuration changed during validation. Reopen the editor.'
+	has_pending_uci_changes && fail 'Pending ByeDPI UCI changes appeared during validation. Apply or revert them first.'
+	mv -f "$temporary_directory/byedpi" "$CONFIG_FILE" || fail 'Unable to replace the configuration.'
+
+	json_init
+	json_add_boolean ok 1
+	json_dump
+}
+
+case "$1" in
+	list)
+		printf '%s\n' '{"status":{},"action":{"action":""},"read":{},"write":{"content":"","revision":""}}'
+		;;
+
+	call)
+		# rpcd passes one JSON request on stdin, possibly without a final newline.
+		IFS= read -r request
+		json_load "$request" || fail 'Invalid request.'
+
+		case "$2" in
+			status) get_status ;;
+			action) run_service_action ;;
+			read) read_configuration ;;
+			write) write_configuration ;;
+			*) fail 'Unsupported RPC method.' ;;
+		esac
+		;;
+
+	*)
+		exit 1
+		;;
+esac

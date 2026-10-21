@@ -1,0 +1,128 @@
+name: Build and publish release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag matching PKG_VERSION, for example v1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+
+          tag = os.environ['RELEASE_TAG']
+          makefile = Path('luci-app-byedpi/Makefile').read_text()
+          version = re.search(r'^PKG_VERSION:=(.+)$', makefile, re.MULTILINE).group(1)
+
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', tag) or tag != 'v' + version:
+              raise SystemExit(f'Tag {tag!r} must equal v{version} from Makefile')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\n')
+          PY
+
+          if existing_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha 2>/dev/null); then
+            if [ "$existing_commit" != "$GITHUB_SHA" ]; then
+              echo "Tag $RELEASE_TAG points to another commit. Select that tag in Run workflow or use a new version."
+              exit 1
+            fi
+          fi
+
+  build:
+    needs: validate
+    uses: ./.github/workflows/build-packages.yml
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: packages-*
+          path: artifacts
+      - name: Verify and assemble release
+        run: |
+          python3 scripts/prepare-release.py \
+            --artifacts artifacts \
+            --output release \
+            --repository "$GITHUB_REPOSITORY"
+      - name: Create and publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists. Use a new version or remove the failed draft before retrying."
+            exit 1
+          fi
+
+          python3 - <<'PYNOTES'
+          import os
+          from pathlib import Path
+
+          repository = os.environ['GITHUB_REPOSITORY']
+          commit = os.environ['GITHUB_SHA']
+          installer_url = f'https://github.com/{repository}/releases/latest/download/install.sh'
+          readme_url = f'https://github.com/{repository}/blob/{commit}/README.md'
+
+          Path('release-notes.md').write_text(f'''## Установка и обновление
+
+          Выполните в консоли роутера одну команду:
+
+          ```sh
+          sh <(wget -O - {installer_url})
+          ```
+
+          Если ByeDPI ещё не установлен, подтвердите его установку ответом `y`.
+          Подходящий пакет основного сервиса будет скачан из DPITrickster/ByeDPI-OpenWrt.
+          Если для установленного ByeDPI есть новая версия, скрипт предложит обновить его.
+          При отказе обновится только интерфейс. Настройки сохраняются. [Подробности]({readme_url}).
+
+          Команда всегда устанавливает последнюю стабильную версию интерфейса.
+          Пакет для OpenWrt 24.10 или 25.12 выбирается автоматически.
+          После установки откройте **Services → ByeDPI**.
+
+          Исходный коммит: `{commit}`.
+          ''')
+          PYNOTES
+
+          gh release create "$RELEASE_TAG" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "LuCI ByeDPI $RELEASE_TAG" \
+            --notes-file release-notes.md
+
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

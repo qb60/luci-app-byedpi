@@ -1,0 +1,13 @@
+{
+	"luci-app-byedpi": {
+		"description": "Manage ByeDPI",
+		"read": {
+			"ubus": { "luci.byedpi": [ "status", "read" ] },
+			"uci": [ "byedpi" ]
+		},
+		"write": {
+			"ubus": { "luci.byedpi": [ "action", "write" ] },
+			"uci": [ "byedpi" ]
+		}
+	}
+}

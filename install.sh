@@ -203,15 +203,11 @@ core_version_matches() {
 }
 
 check_core_update() {
-    printf 'Checking installed ByeDPI...\n'
     installed_version=$(installed_core_version)
     if [ -z "$installed_version" ]; then
         printf 'Unable to determine the installed ByeDPI version; skipping its update check.\n'
         return 0
     fi
-
-    printf 'Installed ByeDPI version: %s\n' "$installed_version"
-    printf 'Checking the latest compatible ByeDPI release...\n'
 
     ensure_jsonfilter
     # A failed optional update lookup must not block the LuCI installation.
@@ -226,7 +222,7 @@ check_core_update() {
     load_core_package
     available_version=${core_filename#byedpi_}
     available_version=${available_version%_"$architecture"."$package_extension"}
-    printf 'Latest compatible ByeDPI version: %s\n' "$available_version"
+    printf 'ByeDPI versions: installed %s | repository %s\n' "$installed_version" "$available_version"
 
     if core_version_matches "$available_version" gt "$installed_version"; then
         printf 'ByeDPI update available: %s -> %s. Update? [y/N]: ' "$installed_version" "$available_version"
@@ -257,6 +253,7 @@ install_byedpi() {
     else
         printf 'Installing ByeDPI %s for %s...\n' "$core_tag" "$architecture"
     fi
+    printf 'Downloading %s...\n' "$core_filename"
     download "https://github.com/$CORE_REPOSITORY/releases/download/$core_tag/$core_filename" \
         "$temporary_directory/$core_filename" || fail 'Unable to download the ByeDPI package.'
 
@@ -265,7 +262,8 @@ install_byedpi() {
         [ "$core_digest" != "$core_checksum" ] && printf '%s\n' "$core_checksum" | grep -Eq '^[0-9a-f]{64}$' ||
             fail 'Invalid SHA-256 digest in the ByeDPI release metadata.'
         printf '%s  %s\n' "$core_checksum" "$core_filename" > "$temporary_directory/core.sha256"
-        (cd "$temporary_directory" && sha256sum -c core.sha256) || fail 'ByeDPI checksum verification failed.'
+        (cd "$temporary_directory" && sha256sum -c core.sha256 > /dev/null) || fail 'ByeDPI checksum verification failed.'
+        printf 'ByeDPI package checksum verified.\n'
     else
         printf 'The ByeDPI release does not provide a digest; using its GitHub HTTPS download.\n'
     fi
@@ -291,6 +289,8 @@ install_byedpi() {
             fail 'The package manager did not install the requested ByeDPI version.'
     fi
 }
+
+printf 'Installing LuCI for ByeDPI...\nChecking installed and available ByeDPI versions...\n'
 
 [ "$(id -u)" = 0 ] || fail 'Run this installer as root on the router.'
 
@@ -349,13 +349,15 @@ printf '%s\n' "$checksum" | grep -Eq '^[0-9a-f]{64}$' || fail 'Invalid package c
 
 printf 'OpenWrt: %s\nPackage family: %s\n' "$openwrt_version" "$build_family"
 
+printf 'Downloading %s...\n' "$filename"
 download "$release_url/$filename" "$temporary_directory/$filename" || fail 'Unable to download the package.'
 printf '%s  %s\n' "$checksum" "$filename" > "$temporary_directory/package.sha256"
 
 (
     cd "$temporary_directory"
-    sha256sum -c package.sha256
+    sha256sum -c package.sha256 > /dev/null
 ) || fail 'Checksum verification failed. The package was not installed.'
+printf 'LuCI package checksum verified.\n'
 
 if [ "$install_core" = 0 ]; then
     check_core_update

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check complete build coverage and prepare release assets and installer metadata."""
+"""Check complete build coverage and prepare packages and release metadata."""
 
 import argparse
 import hashlib
@@ -9,10 +9,7 @@ import re
 import shutil
 
 
-def prepare_release(artifact_directory, output_directory, repository):
-    if not re.fullmatch(r'[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+', repository):
-        raise ValueError('Expected repository in owner/name format')
-
+def prepare_release(artifact_directory, output_directory):
     expected_families = {'24.10', '25.12'}
     records = {}
 
@@ -56,10 +53,6 @@ def prepare_release(artifact_directory, output_directory, repository):
     build_info = [record for record, _ in sorted(records.values(), key=lambda item: item[0]['family'])]
     (output_directory / 'build-info.json').write_text(json.dumps(build_info, indent=2) + '\n')
 
-    installer = Path('scripts/install.sh').read_text()
-    installer = installer.replace("DEFAULT_REPOSITORY=''", f"DEFAULT_REPOSITORY='{repository}'", 1)
-    (output_directory / 'install.sh').write_text(installer)
-
     checksum_lines = [f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}'
                       for path in sorted(output_directory.iterdir())]
     (output_directory / 'SHA256SUMS').write_text('\n'.join(checksum_lines) + '\n')
@@ -69,10 +62,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--artifacts', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--repository', required=True)
     arguments = parser.parse_args()
 
-    prepare_release(arguments.artifacts, arguments.output, arguments.repository)
+    prepare_release(arguments.artifacts, arguments.output)
 
 
 if __name__ == '__main__':

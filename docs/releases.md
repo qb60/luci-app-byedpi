@@ -48,7 +48,7 @@ SDK проверяется по SHA-256 перед распаковкой. То�
    Также допустим суффикс ревизии из `PKG_RELEASE`, например `v1.0.0-r2`.
 4. Нажмите **Run workflow**. Запустятся проверки и две сборки.
 5. После их успеха релиз появится в **Releases**. В нём будут `.ipk`, `.apk`,
-   `install.sh`, `packages.tsv`, `build-info.json` и `SHA256SUMS`.
+   `packages.tsv`, `build-info.json` и `SHA256SUMS`.
 
 Если тег ещё не существует, он создаётся на коммите запуска. Существующий
 тег должен указывать на тот же коммит. Workflow сначала создаёт draft,
@@ -136,11 +136,11 @@ git push origin v0.0.1-r2
 ## Установка на роутере
 
 Готовая команда для установки и обновления находится в README.
-Адрес репозитория в самом установщике подставляет workflow:
-пользователям не нужны переменные и аргументы. Пример для этого проекта:
+Установщик `install.sh` находится в корне репозитория и загружается из `main`.
+Пакеты и их контрольные суммы он получает из Releases. Пример:
 
 ```sh
-sh <(wget -q -O - https://github.com/qb60/luci-app-byedpi/releases/latest/download/install.sh)
+sh <(wget -q -O - https://raw.githubusercontent.com/qb60/luci-app-byedpi/main/install.sh)
 ```
 
 Выполните команду от root. Если ByeDPI отсутствует, подтвердите его установку
@@ -163,12 +163,10 @@ sh <(wget -q -O - https://github.com/qb60/luci-app-byedpi/releases/latest/downlo
 Любая стабильная patch-версия внутри ветки использует один и тот же пакет.
 SNAPSHOT и release candidate автоматически не устанавливаются.
 
-Для конкретного релиза скачайте `install.sh` по адресу
-`https://github.com/OWNER/REPOSITORY/releases/download/v1.0.0/install.sh`
-и запустите:
+Для установки конкретного релиза передайте тег текущему установщику:
 
 ```sh
-sh install.sh OWNER/REPOSITORY v1.0.0
+sh <(wget -q -O - https://raw.githubusercontent.com/qb60/luci-app-byedpi/main/install.sh) qb60/luci-app-byedpi v0.0.1-r2
 ```
 
 Нужны root, доступ к GitHub по HTTPS, `wget` или `curl`, `sha256sum` и рабочие
@@ -206,12 +204,18 @@ SHA-256 основного пакета проверяется по digest GitHu
   перезаписывает существующие релизы автоматически.
 - Для исправлений опубликованного кода используйте новую версию и новый тег.
 
+Для обновления только установщика достаточно изменить корневой `install.sh`
+и отправить коммит в `main`. Увеличивать `PKG_RELEASE`, ставить тег и пересобирать
+пакеты не нужно. Workflow **Check installer** выполнит проверки без SDK-сборки.
+При следующем запуске команды из README пользователь получит новый скрипт
+и пакеты из последнего опубликованного релиза.
+
 ## Локальные проверки
 
 ```sh
 python3 tests/release.py
 bash -n scripts/build-package.sh
-busybox ash -n scripts/install.sh
+busybox ash -n install.sh
 actionlint
 ```
 

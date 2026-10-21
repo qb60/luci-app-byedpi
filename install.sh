@@ -3,7 +3,7 @@
 set -eu
 set -f
 
-DEFAULT_REPOSITORY=''
+DEFAULT_REPOSITORY='qb60/luci-app-byedpi'
 repository=${1:-$DEFAULT_REPOSITORY}
 release_tag=${2:-latest}
 temporary_directory=

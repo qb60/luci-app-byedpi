@@ -11,7 +11,7 @@
 Выполните в консоли роутера от root:
 
 ```sh
-sh <(wget -q -O - https://github.com/qb60/luci-app-byedpi/releases/latest/download/install.sh)
+sh <(wget -q -O - https://raw.githubusercontent.com/qb60/luci-app-byedpi/main/install.sh)
 ```
 
 Если ByeDPI ещё не установлен, установщик предложит установить его из

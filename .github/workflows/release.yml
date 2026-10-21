@@ -79,8 +79,7 @@ jobs:
         run: |
           python3 scripts/prepare-release.py \
             --artifacts artifacts \
-            --output release \
-            --repository "$GITHUB_REPOSITORY"
+            --output release
       - name: Create and publish complete release
         env:
           GH_TOKEN: ${{ github.token }}

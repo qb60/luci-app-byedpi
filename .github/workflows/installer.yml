@@ -1,0 +1,28 @@
+name: Check installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths: ['install.sh', 'tests/release.py', '.github/workflows/installer.yml']
+  pull_request:
+    paths: ['install.sh', 'tests/release.py', '.github/workflows/installer.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install test shell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y busybox
+      - name: Check installer
+        run: |
+          busybox ash -n install.sh
+          python3 tests/release.py

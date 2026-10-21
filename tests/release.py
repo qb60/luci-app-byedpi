@@ -90,11 +90,12 @@ class ReleaseTests(unittest.TestCase):
         self.package = self.artifacts / self.completed['filename']
 
     def prepare(self):
-        release_script.prepare_release(self.artifacts, self.output, 'example/luci-app-byedpi')
+        release_script.prepare_release(self.artifacts, self.output)
 
-    def test_release_contains_two_universal_packages_and_installer(self):
+    def test_release_contains_packages_and_metadata_without_installer(self):
         self.prepare()
-        self.assertIn("DEFAULT_REPOSITORY='example/luci-app-byedpi'", (self.output / 'install.sh').read_text())
+        self.assertFalse((self.output / 'install.sh').exists())
+        self.assertNotIn('install.sh', (self.output / 'SHA256SUMS').read_text())
         self.assertEqual(len(list(self.output.glob('*.ipk'))), 1)
         self.assertEqual(len(list(self.output.glob('*.apk'))), 1)
         self.assertEqual(len((self.output / 'packages.tsv').read_text().splitlines()), 3)
@@ -172,7 +173,7 @@ class InstallerTests(unittest.TestCase):
         self.config = self.root / 'config'
         self.config.write_text("config byedpi 'main'\n")
         self.installer = self.root / 'install.sh'
-        source = Path('scripts/install.sh').read_text()
+        source = Path('install.sh').read_text()
 
         for original, replacement in [('/etc/openwrt_release', self.release_file),
                                       ('/etc/init.d/byedpi', self.service),
@@ -487,14 +488,11 @@ fi
         self.assertIn(self.filename, self.log.read_text())
 
     def run_one_line_installation(self, answer=None):
-        # Simulate the release-bound installer, with its repository embedded.
-        installer = self.installer.read_text().replace(
-            "DEFAULT_REPOSITORY=''", "DEFAULT_REPOSITORY='example/luci-app-byedpi'")
-        (self.assets / 'install.sh').write_text(installer)
+        (self.assets / 'install.sh').write_text(self.installer.read_text())
 
         return self.run_command([
             'busybox', 'ash', '-c',
-            'sh <(wget -q -O - https://github.com/example/luci-app-byedpi/releases/latest/download/install.sh)',
+            'sh <(wget -q -O - https://raw.githubusercontent.com/qb60/luci-app-byedpi/main/install.sh)',
         ], answer)
 
     def test_one_line_installation_without_arguments(self):
@@ -502,6 +500,8 @@ fi
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('opkg install', self.log.read_text())
         self.assertIn('Installed successfully', result.stdout)
+        self.assertIn('download https://raw.githubusercontent.com/qb60/luci-app-byedpi/main/install.sh', self.log.read_text())
+        self.assertIn('download https://github.com/qb60/luci-app-byedpi/releases/latest/download/packages.tsv', self.log.read_text())
 
     def test_one_line_apk_installation_without_arguments(self):
         self.configure(version='25.12.0')

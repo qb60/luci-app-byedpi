@@ -20,7 +20,7 @@ jobs:
       - name: Check shell syntax and release logic
         run: |
           bash -n scripts/build-package.sh
-          busybox ash -n scripts/install.sh
+          busybox ash -n install.sh
           busybox ash -n luci-app-byedpi/root/usr/libexec/rpcd/luci.byedpi
           python3 tests/release.py
           python3 tests/git-next.py

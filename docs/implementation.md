@@ -35,9 +35,12 @@ See [releases.md](releases.md) for the publication procedure.
 
 Users install or update with a single `sh <(wget -q -O - URL)` command, following
 the documented [Podkop installation flow](https://github.com/itdoginfo/podkop#установка-podkop).
-Release preparation embeds the repository in the installer, and the README
-provides the ready-to-copy command with the actual URL. The user
-supplies no repository arguments or shell variables. Release tags accept
+The root install.sh is downloaded directly from the repository's main branch;
+it is not included in release assets or their checksums. Its default repository
+is qb60/luci-app-byedpi, and packages and manifests still come from Releases.
+The README provides the ready-to-copy command. Installer-only changes run
+the Check installer workflow without building SDK packages and require no new
+release. The user supplies no repository arguments or shell variables. Release tags accept
 vMAJOR.MINOR.PATCH and an optional -rN matching PKG_RELEASE, so a new package
 revision can be published without reusing an existing tag.
 
@@ -124,7 +127,7 @@ They are not a browser or an installed LuCI environment.
 
 Executed locally: BusyBox ash syntax check, 15 backend integration tests,
 27 frontend checks, 59 release/installer tests, actionlint validation of all
-three workflows, and JSON parsing of menu/ACL files. The backend service
+four workflows, and JSON parsing of menu/ACL files. The backend service
 tests substitute the init/procd boundary; the file editor tests use real UCI
 and jshn. No .ipk/.apk artifact was built in this environment.
 

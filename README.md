@@ -110,5 +110,8 @@ apk del luci-app-byedpi byedpi
 ## Ссылки
 
 byedpi: https://github.com/hufrea/byedpi
+
 byedpi для OpenWRT: https://github.com/DPITrickster/ByeDPI-OpenWrt
+
 byedpi для Android с подбором стратегий: https://github.com/romanvht/ByeByeDPI
+

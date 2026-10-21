@@ -27,6 +27,9 @@ msgstr ""
 msgid "Autostart"
 msgstr ""
 
+msgid "Autorun"
+msgstr ""
+
 msgid "Buffer size"
 msgstr ""
 
@@ -60,6 +63,9 @@ msgstr ""
 msgid "Default TTL"
 msgstr ""
 
+msgid "Disable"
+msgstr ""
+
 msgid "Disable UDP"
 msgstr ""
 
@@ -79,6 +85,9 @@ msgid "Drop SACK"
 msgstr ""
 
 msgid "Edit configuration file"
+msgstr ""
+
+msgid "Enable"
 msgstr ""
 
 msgid "Enable this configuration"
@@ -196,9 +205,6 @@ msgid "Split positions"
 msgstr ""
 
 msgid "Start"
-msgstr ""
-
-msgid "Start on boot"
 msgstr ""
 
 msgid "Status"

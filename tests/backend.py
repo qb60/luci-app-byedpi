@@ -31,6 +31,9 @@ class BackendTest(unittest.TestCase):
         self.config.write_text(self.initial)
         self.config.chmod(0o640)
         source = PLUGIN.replace('/usr/share/libubox/jshn.sh', str(TOOLS / 'share/libubox/jshn.sh'))
+        functions = self.root / 'functions.sh'
+        functions.write_text('config_load() { return 0; }\nconfig_get() { export "$1="; }\nconfig_foreach() { :; }\n')
+        source = source.replace('/lib/functions.sh', str(functions))
         for prefix in ['/etc/config', '/var/lock', '/tmp/.uci', '/var/run/rpcd', '/tmp/run/rpcd']:
             source = source.replace(prefix, str(self.root) + prefix)
         self.plugin = self.root / 'plugin'
@@ -71,6 +74,30 @@ class BackendTest(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual(result['content'], self.initial)
         self.assertEqual(result['revision'], hashlib.sha256(self.initial.encode()).hexdigest())
+
+    def test_apk_version_uses_installed_package_metadata(self):
+        apk = self.commands / 'apk'
+        apk.write_text('#!/bin/sh\n[ "$*" = "info -e -v byedpi" ] || exit 1\nprintf "byedpi-0.17.3-r1\\n"\n')
+        apk.chmod(0o755)
+        result = self.call('status')
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['version'], '0.17.3-r1')
+
+    def test_missing_package_version_does_not_break_status(self):
+        apk = self.commands / 'apk'
+        apk.write_text('#!/bin/sh\nexit 1\n')
+        apk.chmod(0o755)
+        result = self.call('status')
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['version'], '')
+
+    def test_opkg_version_uses_installed_package_metadata(self):
+        opkg = self.commands / 'opkg'
+        opkg.write_text('#!/bin/sh\n[ "$*" = "status byedpi" ] || exit 1\nprintf "Package: byedpi\\nVersion: 0.17.3-r1\\n"\n')
+        opkg.chmod(0o755)
+        result = self.call('status')
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['version'], '0.17.3-r1')
 
     def test_valid_write_preserves_format_permissions_unknown_sections(self):
         content = self.initial.replace("enabled '1'", "enabled '0'") + '# end\n\n'

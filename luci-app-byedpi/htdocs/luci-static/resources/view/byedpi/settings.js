@@ -79,7 +79,7 @@ return view.extend({
 		if (uci.get('byedpi', 'main', '.type') !== 'byedpi') {
 			this.handleSave = this.handleSaveApply = this.handleReset = null;
 			return E('div', {}, [ E('p', {}, _('The byedpi main section is missing. Use the file editor to add: config byedpi \'main\'.')),
-				E('button', { 'class': 'cbi-button', 'disabled': !L.hasViewPermission(), 'click': () => this.openEditor() }, _('Edit configuration file')) ]);
+				E('button', { 'class': 'cbi-button cbi-button-action', 'disabled': !L.hasViewPermission() || null, 'click': () => this.openEditor() }, _('Edit configuration file')) ]);
 		}
 
 		const mainSection = settingsMap.section(form.NamedSection, 'main', 'byedpi');
@@ -126,7 +126,7 @@ return view.extend({
 				return Promise.resolve(renderOriginalOption.apply(this, arguments)).then(node =>
 					E('fieldset', { 'data-byedpi-individual': '', 'style': 'border:0;padding:0;margin:0;min-width:0',
 						'data-byedpi-advanced': isAdvancedOption ? '' : null,
-						'disabled': !!customOptionsField.formvalue('main') || !!uci.get('byedpi', 'main', 'cmd_opts') }, [ node ]));
+						'disabled': customOptionsField.formvalue('main') || uci.get('byedpi', 'main', 'cmd_opts') ? true : null }, [ node ]));
 			};
 			return option;
 		};
@@ -217,8 +217,8 @@ return view.extend({
 			this.updateMode();
 
 			const editConfigurationButton = E('button', {
-				'class': 'cbi-button',
-				'disabled': !!settingsMap.readonly,
+				'class': 'cbi-button cbi-button-action',
+				'disabled': settingsMap.readonly || null,
 				'click': () => this.openEditor()
 			}, _('Edit configuration file'));
 

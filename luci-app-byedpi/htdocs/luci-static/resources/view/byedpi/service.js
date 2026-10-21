@@ -18,11 +18,6 @@ return view.extend({
 			'style': 'white-space:pre-wrap'
 		});
 
-		const autostartCheckbox = E('input', {
-			'type': 'checkbox',
-			'disabled': true
-		});
-
 		let operationInProgress = false;
 		let statusLoaded = false;
 
@@ -30,7 +25,6 @@ return view.extend({
 			const disabled = operationInProgress || !canWrite || !statusLoaded;
 
 			actionButtons.forEach(button => { button.disabled = disabled; });
-			autostartCheckbox.disabled = disabled;
 		};
 
 		const refreshStatus = () => byedpi.status().then(response => {
@@ -42,10 +36,6 @@ return view.extend({
 			statusFields.ip.textContent = serviceInfo.ip || _('Unknown');
 			statusFields.port.textContent = serviceInfo.port || _('Unknown');
 
-			if (!operationInProgress) {
-				autostartCheckbox.checked = !!response.autostart;
-			}
-
 			statusLoaded = true;
 			updateControls();
 		}).catch(error => {
@@ -56,7 +46,7 @@ return view.extend({
 		});
 
 		const performAction = action => {
-			if (operationInProgress) {
+			if (operationInProgress || !canWrite || !statusLoaded) {
 				return Promise.resolve();
 			}
 
@@ -74,9 +64,6 @@ return view.extend({
 			});
 		};
 
-		autostartCheckbox.addEventListener('change', () =>
-			performAction(autostartCheckbox.checked ? 'enable' : 'disable'));
-
 		const informationRows = [
 			[ 'version', _('Version') ],
 			[ 'status', _('Status') ],
@@ -85,7 +72,10 @@ return view.extend({
 			[ 'port', _('Listen Port') ]
 		];
 
-		const informationTable = E('div', { 'class': 'table' }, informationRows.map(([ name, title ]) => {
+		const informationTable = E('div', {
+			'class': 'table',
+			'style': 'width:100%;max-width:32rem;table-layout:fixed;margin-bottom:1em'
+		}, informationRows.map(([ name, title ]) => {
 			const valueCell = E('div', {
 				'class': 'td',
 				'style': 'overflow-wrap:anywhere'
@@ -94,25 +84,36 @@ return view.extend({
 			statusFields[name] = valueCell;
 
 			return E('div', { 'class': 'tr' }, [
-				E('div', { 'class': 'td' }, title),
+				E('div', { 'class': 'td', 'style': 'width:40%;overflow-wrap:anywhere' }, title),
 				valueCell
 			]);
 		}));
 
-		const serviceActions = [
-			[ 'start', _('Start') ],
-			[ 'stop', _('Stop') ],
-			[ 'restart', _('Restart') ]
-		];
+		const actionRow = (title, actions) => E('div', {
+			'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.5em 1em;margin:.75em 0'
+		}, [
+			E('span', { 'style': 'min-width:5em' }, title),
+			E('div', { 'style': 'display:flex;flex-wrap:wrap;gap:.5em' }, actions.map(([ action, label, buttonClass ]) => {
+				const button = E('button', {
+					'type': 'button',
+					'class': 'cbi-button ' + buttonClass,
+					'disabled': true,
+					'click': () => performAction(action)
+				}, label);
+				actionButtons.push(button);
+				return button;
+			}))
+		]);
 
-		for (const [ action, title ] of serviceActions) {
-			actionButtons.push(E('button', {
-				'class': 'cbi-button cbi-button-action',
-				'disabled': true,
-				'click': () => performAction(action),
-				'style': 'margin:0 .5em .5em 0'
-			}, title));
-		}
+		const autorunControls = actionRow(_('Autorun'), [
+			[ 'enable', _('Enable'), 'cbi-button-positive' ],
+			[ 'disable', _('Disable'), 'cbi-button-negative' ]
+		]);
+		const serviceControls = actionRow(_('Service'), [
+			[ 'start', _('Start'), 'cbi-button-action' ],
+			[ 'restart', _('Restart'), 'cbi-button-action' ],
+			[ 'stop', _('Stop'), 'cbi-button-negative' ]
+		]);
 
 		poll.add(() => operationInProgress ? Promise.resolve() : refreshStatus(), 5);
 		refreshStatus();
@@ -120,8 +121,8 @@ return view.extend({
 		return E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, _('ByeDPI')),
 			informationTable,
-			E('p', {}, [ E('label', {}, [ autostartCheckbox, ' ', _('Start on boot') ]) ]),
-			E('div', {}, actionButtons),
+			autorunControls,
+			serviceControls,
 			operationMessage
 		]);
 	}

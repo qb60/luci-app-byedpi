@@ -78,7 +78,12 @@ status elements and does not reload the configuration form.
 `status`, `read` and UCI byedpi. Write permissions cover `action`, `write` and
 UCI byedpi. There are no file, exec, wildcard service or wildcard UCI grants.
 Service actions are checked against a fixed allowlist. Buttons respect LuCI
-write permissions. UI output uses text nodes/textContent rather than HTML.
+write permissions. Autorun has Enable/Disable buttons; daemon controls have
+Start/Restart/Stop buttons. Disable and Stop use LuCI's negative button class.
+The status table is capped at 32rem and shrinks with the viewport. UI output
+uses text nodes/textContent rather than HTML. Optional HTML boolean attributes
+are omitted with null, since even disabled="false" disables a native button.
+APK version metadata uses info -e -v, consistently with the installer.
 
 The executable rpcd plugin queries `service list` in ubus. While running, the
 listener is derived from the actual command argv registered with procd, so
@@ -125,8 +130,8 @@ is modified. The frontend tests parse all JS files and use lightweight API/DOM
 test doubles for mode switching, list widget selection and write preservation.
 They are not a browser or an installed LuCI environment.
 
-Executed locally: BusyBox ash syntax check, 15 backend integration tests,
-27 frontend checks, 59 release/installer tests, actionlint validation of all
+Executed locally: BusyBox ash syntax check, 18 backend integration tests,
+62 frontend checks, 59 release/installer tests, actionlint validation of all
 four workflows, and JSON parsing of menu/ACL files. The backend service
 tests substitute the init/procd boundary; the file editor tests use real UCI
 and jshn. No .ipk/.apk artifact was built in this environment.
@@ -137,10 +142,10 @@ For each OpenWrt release, install both packages and check the following in the
 default LuCI theme, including a narrow mobile viewport:
 
 1. Services → ByeDPI appears; Service is the default tab; Back/Forward work.
-2. Version matches `opkg status byedpi` or `apk info -v byedpi`.
+2. Version matches `opkg status byedpi` or `apk info -e -v byedpi`.
 3. procd running/stopped states match the view, including no registered service.
 4. Start/Stop/Restart report success and failure; double clicks are blocked.
-5. Start on boot matches `byedpi enabled` and survives reboot independently of
+5. Autorun buttons update `byedpi enabled` and survive reboot independently of
    the UCI main.enabled option.
 6. Save/Apply/Reset, inline validation and config.change reload work with
    unknown sections/options. Confirm only the init script trigger reloads.

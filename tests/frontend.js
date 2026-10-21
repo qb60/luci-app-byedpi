@@ -36,6 +36,7 @@ assert(info.ip === null && info.port === '1080', 'Multiple configured listeners'
 // Small LuCI/DOM test doubles exercise mode switching and UCI writes.
 function element(tag, attrs, children) {
 	const node = { tag, attrs: attrs || {}, children: [], listeners: {},
+		disabled: attrs != null && attrs.disabled != null,
 		appendChild(child) {
 			if (child && typeof child === 'object') {
 				if (child.parent) child.parent.children = child.parent.children.filter(x => x !== child);
@@ -59,7 +60,8 @@ const values = { cmd_opts: '--split 1', debug: '3', port: '1080', split: ['1', '
 const writes = [];
 const uci = {
 	get: (c, s, o) => o === '.type' ? 'byedpi' : values[o],
-	set: (c, s, o, v) => { values[o] = v; writes.push(o); }
+	set: (c, s, o, v) => { values[o] = v; writes.push(o); },
+	changes: () => Promise.resolve({})
 };
 const input = { ...values };
 function Option(type, name) { this.type = type; this.option = name; }
@@ -80,9 +82,25 @@ Map.prototype = {
 };
 const form = { Map, NamedSection: Section, Flag: 'flag', Value: 'value', TextValue: 'text', DummyValue: 'dummy', DynamicList: 'list' };
 const dom = { content(node, children) { node.children = [children]; } };
+let editorModal;
+const ui = {
+	showModal: (title, children) => { editorModal = element('div', {}, children); },
+	hideModal: () => {},
+	addNotification: () => { throw new Error('Unexpected editor error'); }
+};
+const editorContent = "# Preserve formatting\nconfig byedpi 'main'\n";
+const editorApi = { ...api, read: () => Promise.resolve({ content: editorContent, revision: 'revision' }) };
 const settings = new Function('view', 'form', 'uci', 'ui', 'dom', 'byedpi', 'E', '_', 'L', std.loadFile(root + 'view/byedpi/settings.js'))(
-	extend, form, uci, {}, dom, api, element, x => x, { hasViewPermission: () => true });
-await settings.render();
+	extend, form, uci, ui, dom, editorApi, element, x => x, { hasViewPermission: () => true });
+const settingsNode = await settings.render();
+const descendants = node => node && typeof node === 'object'
+	? [ node ].concat((node.children || []).flatMap(descendants)) : [];
+const editorButton = node => descendants(node).find(child => child.tag === 'button' && child.children.includes('Edit configuration file'));
+assert(!editorButton(settingsNode).disabled, 'File editor is enabled with write access (disabled=false must not become an HTML attribute)');
+await editorButton(settingsNode).attrs.click();
+assert(editorModal != null, 'Editor button opens the configuration editor');
+assert(descendants(editorModal).find(node => node.tag === 'textarea').value === editorContent, 'Editor loads the current configuration with formatting');
+assert(!descendants(editorModal).find(node => node.tag === 'button' && node.children.includes('Save')).disabled, 'Editor save is enabled');
 let fields = settings.formHost.querySelectorAll('[data-byedpi-individual]');
 assert(fields.length === 37, 'All individual init options rendered: ' + fields.length);
 assert(fields.every(node => node.disabled), 'Custom mode disables fields');
@@ -106,4 +124,66 @@ options.find(o => o.option === 'debug').write('main', '1');
 assert(values.debug === '3', 'Saving an unchanged debug checkbox retains its numeric level');
 options.find(o => o.option === 'debug').write('main', '0');
 assert(values.debug === '0', 'Changing debug checkbox writes the requested state');
+
+Map.prototype.readonly = true;
+const readonlySettings = await settings.render();
+assert(editorButton(readonlySettings).disabled, 'File editor stays disabled without write access');
+delete Map.prototype.readonly;
+
+// Service actions, polling and read-only access use the same controls as LuCI.
+let allowServiceWrites = true;
+let autostart = false;
+let finishAction;
+let serviceFailure = false;
+const requestedActions = [];
+const pollCallbacks = [];
+const serviceApi = {
+	serviceInfo: api.serviceInfo,
+	status: () => Promise.resolve({ version: '0.17.3-r1', service: '{}', autostart }),
+	action: action => {
+		requestedActions.push(action);
+		return new Promise((resolve, reject) => {
+			finishAction = () => {
+				if (serviceFailure) reject(new Error('Service action failed'));
+				else {
+					if (action === 'enable') autostart = true;
+					if (action === 'disable') autostart = false;
+					resolve();
+				}
+			};
+		});
+	}
+};
+const service = new Function('view', 'poll', 'byedpi', 'E', '_', 'L', std.loadFile(root + 'view/byedpi/service.js'))(
+	extend, { add: (callback, interval) => { pollCallbacks.push(callback); assert(interval === 5, 'Service polls every five seconds'); } },
+	serviceApi, element, x => x, { hasViewPermission: () => allowServiceWrites });
+const serviceNode = service.render();
+await pollCallbacks[0]();
+const serviceButtons = descendants(serviceNode).filter(node => node.tag === 'button');
+assert(serviceButtons.map(button => button.children[0]).join(',') === 'Enable,Disable,Start,Restart,Stop', 'Autorun and daemon button order');
+assert(serviceButtons.every(button => !button.disabled), 'Actions become available after status loads');
+assert(serviceButtons.filter(button => button.attrs.class.includes('negative')).map(button => button.children[0]).join(',') === 'Disable,Stop', 'Disable and Stop use the red LuCI button class');
+assert(descendants(serviceNode).some(node => node.textContent === '0.17.3-r1'), 'The installed package version is displayed');
+for (const [index, action] of ['enable', 'disable', 'start', 'restart', 'stop'].entries()) {
+	const pending = serviceButtons[index].attrs.click();
+	assert(serviceButtons.every(button => button.disabled), 'All actions are blocked during ' + action);
+	await serviceButtons[index].attrs.click();
+	assert(requestedActions.length === index + 1, 'Repeated clicks do not repeat ' + action);
+	finishAction();
+	await pending;
+	assert(requestedActions[index] === action, 'The correct RPC action is sent for ' + action);
+	assert(serviceButtons.every(button => !button.disabled), 'Controls recover after ' + action);
+	if (action === 'enable' || action === 'disable') {
+		assert(descendants(serviceNode).some(node => node.textContent === (action === 'enable' ? 'Enabled' : 'Disabled')), 'Autostart status refreshes after ' + action);
+	}
+}
+serviceFailure = true;
+const failedAction = serviceButtons[2].attrs.click();
+finishAction();
+await failedAction;
+assert(descendants(serviceNode).some(node => node.textContent === 'Service action failed'), 'RPC action errors are visible');
+allowServiceWrites = false;
+const readonlyService = service.render();
+await pollCallbacks[1]();
+assert(descendants(readonlyService).filter(node => node.tag === 'button').every(button => button.disabled), 'Read-only sessions cannot control service or autorun');
 console.log(`${checks} frontend checks passed`);

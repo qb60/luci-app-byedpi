@@ -47,9 +47,7 @@ get_status() {
 	version=
 
 	if command -v apk >/dev/null 2>&1; then
-		if apk info -e byedpi >/dev/null 2>&1; then
-			version="$(apk info -v byedpi 2>/dev/null | sed -n 's/^byedpi-//p' | head -n 1)"
-		fi
+		version="$(apk info -e -v byedpi 2>/dev/null | sed -n 's/^byedpi-//p' | head -n 1)"
 	elif command -v opkg >/dev/null 2>&1; then
 		version="$(opkg status byedpi 2>/dev/null | sed -n 's/^Version: //p' | head -n 1)"
 	fi

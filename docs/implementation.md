@@ -78,8 +78,12 @@ status elements and does not reload the configuration form.
 `status`, `read` and UCI byedpi. Write permissions cover `action`, `write` and
 UCI byedpi. There are no file, exec, wildcard service or wildcard UCI grants.
 Service actions are checked against a fixed allowlist. Buttons respect LuCI
-write permissions. Autorun has Enable/Disable buttons; daemon controls have
+write permissions. Autostart has Enable/Disable buttons; daemon controls have
 Start/Restart/Stop buttons. Disable and Stop use LuCI's negative button class.
+Only the action that changes autostart is enabled. Start is available while
+stopped; Restart and Stop are available while running. All controls stay
+disabled during operations and the following status refresh, or when status
+is unavailable. Polling also updates buttons after external state changes.
 The status table is capped at 32rem and shrinks with the viewport. UI output
 uses text nodes/textContent rather than HTML. Optional HTML boolean attributes
 are omitted with null, since even disabled="false" disables a native button.
@@ -111,6 +115,10 @@ and after validation detect outside edits. A directory lock serializes this
 plugin's write and service operations. Cleanup traps remove temporary files.
 No service restart happens on raw Save or Cancel. Raw Save reloads the browser's
 UCI cache and form; the Service tab's Restart applies the saved file explicitly.
+Map.render() refreshes the existing form root in place. It must not be
+reinserted through dom.content(), which discards descendant widget bindings.
+The frontend regression test models this registry cleanup and exercises raw
+Save followed by access to the refreshed form fields.
 
 ## Local checks
 
@@ -131,7 +139,7 @@ test doubles for mode switching, list widget selection and write preservation.
 They are not a browser or an installed LuCI environment.
 
 Executed locally: BusyBox ash syntax check, 18 backend integration tests,
-62 frontend checks, 59 release/installer tests, actionlint validation of all
+82 frontend checks, 59 release/installer tests, actionlint validation of all
 four workflows, and JSON parsing of menu/ACL files. The backend service
 tests substitute the init/procd boundary; the file editor tests use real UCI
 and jshn. No .ipk/.apk artifact was built in this environment.
@@ -145,7 +153,7 @@ default LuCI theme, including a narrow mobile viewport:
 2. Version matches `opkg status byedpi` or `apk info -e -v byedpi`.
 3. procd running/stopped states match the view, including no registered service.
 4. Start/Stop/Restart report success and failure; double clicks are blocked.
-5. Autorun buttons update `byedpi enabled` and survive reboot independently of
+5. Autostart buttons update `byedpi enabled` and survive reboot independently of
    the UCI main.enabled option.
 6. Save/Apply/Reset, inline validation and config.change reload work with
    unknown sections/options. Confirm only the init script trigger reloads.

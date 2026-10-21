@@ -27,9 +27,6 @@ msgstr ""
 msgid "Autostart"
 msgstr ""
 
-msgid "Autorun"
-msgstr ""
-
 msgid "Buffer size"
 msgstr ""
 

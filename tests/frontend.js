@@ -58,17 +58,27 @@ function element(tag, attrs, children) {
 }
 const values = { cmd_opts: '--split 1', debug: '3', port: '1080', split: ['1', '2+s'] };
 const writes = [];
+const cacheOperations = [];
 const uci = {
 	get: (c, s, o) => o === '.type' ? 'byedpi' : values[o],
 	set: (c, s, o, v) => { values[o] = v; writes.push(o); },
-	changes: () => Promise.resolve({})
+	changes: () => Promise.resolve({}),
+	unload: config => { cacheOperations.push('unload ' + config); },
+	load: config => { cacheOperations.push('load ' + config); Object.assign(input, values); return Promise.resolve(); }
 };
 const input = { ...values };
 function Option(type, name) { this.type = type; this.option = name; }
 Option.prototype = {
-	formvalue() { return input[this.option] || ''; },
+	formvalue() {
+		if (this.node) dom.data(this.node);
+		return input[this.option] || '';
+	},
 	parse() { writes.push(this.option); return Promise.resolve(); },
-	render() { return Promise.resolve(element('div', {}, [this.option])); }
+	render() {
+		this.node = element('div', {}, [this.option]);
+		dom.bind(this.node, this);
+		return Promise.resolve(this.node);
+	}
 };
 function Section() { this.options = []; }
 Section.prototype = {
@@ -78,18 +88,56 @@ Section.prototype = {
 function Map() { this.sections = []; }
 Map.prototype = {
 	section() { const s = new Section(); this.sections.push(s); return s; },
-	render() { return Promise.all(this.sections.map(s => s.render())).then(nodes => element('div', {}, nodes)); }
+	render() {
+		this.root ||= element('div');
+		dom.bind(this.root, this);
+		return Promise.all(this.sections.map(s => s.render())).then(nodes => {
+			dom.content(this.root, nodes);
+			return this.root;
+		});
+	}
 };
 const form = { Map, NamedSection: Section, Flag: 'flag', Value: 'value', TextValue: 'text', DummyValue: 'dummy', DynamicList: 'list' };
-const dom = { content(node, children) { node.children = [children]; } };
+// Like LuCI, content() destroys descendant registry entries, and Map.render()
+// updates its existing root. Reinserting that root must not clear its widgets.
+const registry = {};
+let nextRegistryId = 0;
+const dom = {
+	bind(node, instance) {
+		if (node.attrs['data-idref'] == null) {
+			node.attrs['data-idref'] = ++nextRegistryId;
+			registry[nextRegistryId] = {};
+		}
+		registry[node.attrs['data-idref']]._class = instance;
+	},
+	data(node) { return registry[node.attrs['data-idref']]._class; },
+	content(node, children) {
+		for (const child of node.querySelectorAll('[data-idref]')) delete registry[child.attrs['data-idref']];
+		node.children = [];
+		for (const child of (Array.isArray(children) ? children : children == null ? [] : [children])) node.appendChild(child);
+	}
+};
 let editorModal;
+let modalClosed = false;
+const notifications = [];
 const ui = {
 	showModal: (title, children) => { editorModal = element('div', {}, children); },
-	hideModal: () => {},
-	addNotification: () => { throw new Error('Unexpected editor error'); }
+	hideModal: () => { modalClosed = true; },
+	addNotification: (title, message, type) => { notifications.push({ message, type }); }
 };
 const editorContent = "# Preserve formatting\nconfig byedpi 'main'\n";
-const editorApi = { ...api, read: () => Promise.resolve({ content: editorContent, revision: 'revision' }) };
+const editorWrites = [];
+let rejectEditorWrite = false;
+const editorApi = {
+	...api,
+	read: () => Promise.resolve({ content: editorContent, revision: 'revision' }),
+	write: (content, revision) => {
+		if (rejectEditorWrite) return Promise.reject(new Error('Configuration changed externally'));
+		editorWrites.push({ content, revision });
+		values.cmd_opts = '--split 3';
+		return Promise.resolve();
+	}
+};
 const settings = new Function('view', 'form', 'uci', 'ui', 'dom', 'byedpi', 'E', '_', 'L', std.loadFile(root + 'view/byedpi/settings.js'))(
 	extend, form, uci, ui, dom, editorApi, element, x => x, { hasViewPermission: () => true });
 const settingsNode = await settings.render();
@@ -125,6 +173,26 @@ assert(values.debug === '3', 'Saving an unchanged debug checkbox retains its num
 options.find(o => o.option === 'debug').write('main', '0');
 assert(values.debug === '0', 'Changing debug checkbox writes the requested state');
 
+const existingMap = settings.map;
+const existingRoot = existingMap.root;
+const savedContent = editorContent + "\toption cmd_opts '--split 3'\n";
+descendants(editorModal).find(node => node.tag === 'textarea').value = savedContent;
+await descendants(editorModal).find(node => node.tag === 'button' && node.children.includes('Save')).attrs.click();
+assert(!descendants(editorModal).find(node => node.attrs.role === 'alert').textContent, 'Saving the editor does not invalidate the LuCI widget registry');
+assert(modalClosed && notifications.some(item => item.type === 'info'), 'Successful save closes the editor and confirms the operation');
+assert(editorWrites[0].content === savedContent && editorWrites[0].revision === 'revision', 'Editor saves the exact content and revision token');
+assert(cacheOperations.join(',') === 'unload byedpi,load byedpi', 'Editor refreshes UCI cache after saving');
+assert(settings.map === existingMap && dom.data(existingRoot) === existingMap, 'The existing form and its registry binding are retained');
+assert(custom.formvalue('main') === '--split 3', 'Form fields reflect the saved configuration');
+assert(settings.formHost.querySelectorAll('[data-byedpi-individual]').every(node => node.disabled), 'Custom mode is updated after saving the editor');
+
+rejectEditorWrite = true;
+modalClosed = false;
+await settings.openEditor();
+await descendants(editorModal).find(node => node.tag === 'button' && node.children.includes('Save')).attrs.click();
+assert(!modalClosed && descendants(editorModal).some(node => node.textContent === 'Configuration changed externally'), 'A failed write stays in the editor with an error');
+assert(editorWrites.length === 1 && cacheOperations.length === 2, 'A failed write does not reload or replace the form');
+
 Map.prototype.readonly = true;
 const readonlySettings = await settings.render();
 assert(editorButton(readonlySettings).disabled, 'File editor stays disabled without write access');
@@ -133,13 +201,18 @@ delete Map.prototype.readonly;
 // Service actions, polling and read-only access use the same controls as LuCI.
 let allowServiceWrites = true;
 let autostart = false;
+let running = false;
+let statusFails = false;
 let finishAction;
 let serviceFailure = false;
 const requestedActions = [];
 const pollCallbacks = [];
 const serviceApi = {
 	serviceInfo: api.serviceInfo,
-	status: () => Promise.resolve({ version: '0.17.3-r1', service: '{}', autostart }),
+	status: () => statusFails ? Promise.reject(new Error('Status unavailable')) : Promise.resolve({
+		version: '0.17.3-r1', autostart,
+		service: JSON.stringify({ byedpi: { instances: { main: { running } } } })
+	}),
 	action: action => {
 		requestedActions.push(action);
 		return new Promise((resolve, reject) => {
@@ -148,6 +221,8 @@ const serviceApi = {
 				else {
 					if (action === 'enable') autostart = true;
 					if (action === 'disable') autostart = false;
+					if (action === 'start' || action === 'restart') running = true;
+					if (action === 'stop') running = false;
 					resolve();
 				}
 			};
@@ -158,13 +233,26 @@ const service = new Function('view', 'poll', 'byedpi', 'E', '_', 'L', std.loadFi
 	extend, { add: (callback, interval) => { pollCallbacks.push(callback); assert(interval === 5, 'Service polls every five seconds'); } },
 	serviceApi, element, x => x, { hasViewPermission: () => allowServiceWrites });
 const serviceNode = service.render();
-await pollCallbacks[0]();
 const serviceButtons = descendants(serviceNode).filter(node => node.tag === 'button');
-assert(serviceButtons.map(button => button.children[0]).join(',') === 'Enable,Disable,Start,Restart,Stop', 'Autorun and daemon button order');
-assert(serviceButtons.every(button => !button.disabled), 'Actions become available after status loads');
+const expectAvailableActions = (expected, message) => assert(serviceButtons.filter(button => !button.disabled).map(button => button.children[0]).join(',') === expected, message);
+assert(serviceButtons.every(button => button.disabled), 'Actions are blocked until status is known');
+await pollCallbacks[0]();
+assert(serviceButtons.map(button => button.children[0]).join(',') === 'Enable,Disable,Start,Restart,Stop', 'Autostart and daemon button order');
+assert(descendants(serviceNode).some(node => node.tag === 'span' && node.children.includes('Autostart')), 'The autostart control row is labeled Autostart');
+expectAvailableActions('Enable,Start', 'Stopped service and disabled autostart expose only Start and Enable');
 assert(serviceButtons.filter(button => button.attrs.class.includes('negative')).map(button => button.children[0]).join(',') === 'Disable,Stop', 'Disable and Stop use the red LuCI button class');
 assert(descendants(serviceNode).some(node => node.textContent === '0.17.3-r1'), 'The installed package version is displayed');
-for (const [index, action] of ['enable', 'disable', 'start', 'restart', 'stop'].entries()) {
+const actionStates = [
+	['enable', 'Disable,Start'],
+	['disable', 'Enable,Start'],
+	['start', 'Enable,Restart,Stop'],
+	['restart', 'Enable,Restart,Stop'],
+	['stop', 'Enable,Start']
+];
+for (const [index, [action, expected]] of actionStates.entries()) {
+	const countBefore = requestedActions.length;
+	for (const button of serviceButtons.filter(button => button.disabled)) await button.attrs.click();
+	assert(requestedActions.length === countBefore, 'Unavailable actions do not invoke RPC before ' + action);
 	const pending = serviceButtons[index].attrs.click();
 	assert(serviceButtons.every(button => button.disabled), 'All actions are blocked during ' + action);
 	await serviceButtons[index].attrs.click();
@@ -172,7 +260,7 @@ for (const [index, action] of ['enable', 'disable', 'start', 'restart', 'stop'].
 	finishAction();
 	await pending;
 	assert(requestedActions[index] === action, 'The correct RPC action is sent for ' + action);
-	assert(serviceButtons.every(button => !button.disabled), 'Controls recover after ' + action);
+	expectAvailableActions(expected, 'Controls reflect the refreshed state after ' + action);
 	if (action === 'enable' || action === 'disable') {
 		assert(descendants(serviceNode).some(node => node.textContent === (action === 'enable' ? 'Enabled' : 'Disabled')), 'Autostart status refreshes after ' + action);
 	}
@@ -182,8 +270,19 @@ const failedAction = serviceButtons[2].attrs.click();
 finishAction();
 await failedAction;
 assert(descendants(serviceNode).some(node => node.textContent === 'Service action failed'), 'RPC action errors are visible');
+expectAvailableActions('Enable,Start', 'A failed start leaves only Start and Enable available');
+running = true;
+autostart = true;
+await pollCallbacks[0]();
+expectAvailableActions('Disable,Restart,Stop', 'Polling reflects external service and autostart changes');
+statusFails = true;
+await pollCallbacks[0]();
+assert(serviceButtons.every(button => button.disabled), 'All actions are blocked when status cannot be obtained');
+statusFails = false;
+await pollCallbacks[0]();
+expectAvailableActions('Disable,Restart,Stop', 'Actions recover according to status after polling recovers');
 allowServiceWrites = false;
 const readonlyService = service.render();
 await pollCallbacks[1]();
-assert(descendants(readonlyService).filter(node => node.tag === 'button').every(button => button.disabled), 'Read-only sessions cannot control service or autorun');
+assert(descendants(readonlyService).filter(node => node.tag === 'button').every(button => button.disabled), 'Read-only sessions cannot control service or autostart');
 console.log(`${checks} frontend checks passed`);

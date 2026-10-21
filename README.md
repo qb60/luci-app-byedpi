@@ -32,7 +32,7 @@ sh <(wget -q -O - https://raw.githubusercontent.com/qb60/luci-app-byedpi/main/in
 
 - Версия ByeDPI, состояние сервиса, адрес и порт прокси.
 - Кнопки **Start**, **Stop** и **Restart**.
-- Кнопки **Enable** и **Disable** в строке **Autorun** для автозапуска.
+- Кнопки **Enable** и **Disable** в строке **Autostart** для автозапуска.
 - Автоматическое обновление состояния каждые 5 секунд.
 
 ### Settings
@@ -57,7 +57,7 @@ sh <(wget -q -O - https://raw.githubusercontent.com/qb60/luci-app-byedpi/main/in
 без сохранения. Ошибочный файл не заменит рабочую конфигурацию.
 
 Если вы только что установили ByeDPI, настройте его во вкладке Settings
-и запустите кнопкой **Start**. Для автозапуска нажмите **Enable** в строке **Autorun**.
+и запустите кнопкой **Start**. Для автозапуска нажмите **Enable** в строке **Autostart**.
 Кнопки в этой строке управляют запуском при загрузке роутера, а
 **Enable this configuration** — использованием выбранной конфигурации.
 

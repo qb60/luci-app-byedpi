@@ -11,7 +11,7 @@ return view.extend({
 	render: function() {
 		const canWrite = L.hasViewPermission();
 		const statusFields = {};
-		const actionButtons = [];
+		const actionButtons = {};
 
 		const operationMessage = E('p', {
 			'role': 'status',
@@ -20,15 +20,34 @@ return view.extend({
 
 		let operationInProgress = false;
 		let statusLoaded = false;
+		let serviceRunning = false;
+		let autostartEnabled = false;
+
+		const canPerformAction = action => {
+			if (operationInProgress || !canWrite || !statusLoaded) {
+				return false;
+			}
+
+			switch (action) {
+			case 'enable': return !autostartEnabled;
+			case 'disable': return autostartEnabled;
+			case 'start': return !serviceRunning;
+			case 'restart':
+			case 'stop': return serviceRunning;
+			default: return false;
+			}
+		};
 
 		const updateControls = () => {
-			const disabled = operationInProgress || !canWrite || !statusLoaded;
-
-			actionButtons.forEach(button => { button.disabled = disabled; });
+			for (const [ action, button ] of Object.entries(actionButtons)) {
+				button.disabled = !canPerformAction(action);
+			}
 		};
 
 		const refreshStatus = () => byedpi.status().then(response => {
 			const serviceInfo = byedpi.serviceInfo(response);
+			serviceRunning = serviceInfo.running;
+			autostartEnabled = !!response.autostart;
 
 			statusFields.version.textContent = response.version || _('Unknown');
 			statusFields.status.textContent = serviceInfo.running ? _('Running') : _('Stopped');
@@ -46,7 +65,7 @@ return view.extend({
 		});
 
 		const performAction = action => {
-			if (operationInProgress || !canWrite || !statusLoaded) {
+			if (!canPerformAction(action)) {
 				return Promise.resolve();
 			}
 
@@ -59,8 +78,10 @@ return view.extend({
 			}).catch(error => {
 				operationMessage.textContent = error.message;
 			}).finally(() => {
-				operationInProgress = false;
-				return refreshStatus();
+				return refreshStatus().finally(() => {
+					operationInProgress = false;
+					updateControls();
+				});
 			});
 		};
 
@@ -100,12 +121,12 @@ return view.extend({
 					'disabled': true,
 					'click': () => performAction(action)
 				}, label);
-				actionButtons.push(button);
+				actionButtons[action] = button;
 				return button;
 			}))
 		]);
 
-		const autorunControls = actionRow(_('Autorun'), [
+		const autostartControls = actionRow(_('Autostart'), [
 			[ 'enable', _('Enable'), 'cbi-button-positive' ],
 			[ 'disable', _('Disable'), 'cbi-button-negative' ]
 		]);
@@ -121,7 +142,7 @@ return view.extend({
 		return E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, _('ByeDPI')),
 			informationTable,
-			autorunControls,
+			autostartControls,
 			serviceControls,
 			operationMessage
 		]);

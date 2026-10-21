@@ -53,7 +53,8 @@ return view.extend({
 						if (!node) {
 							return;
 						}
-						dom.content(this.formHost, node);
+						// Map.render() updates the attached root in place. Reinserting
+						// it with dom.content() would discard its widget registry.
 						this.dirty = false;
 						this.updateMode();
 						ui.hideModal();

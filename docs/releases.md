@@ -79,7 +79,7 @@ gh workflow run release.yml -f release_tag=v1.0.0
 пользователям не нужны переменные и аргументы. Пример:
 
 ```sh
-sh <(wget -O - https://github.com/OWNER/REPOSITORY/releases/latest/download/install.sh)
+sh <(wget -q -O - https://github.com/OWNER/REPOSITORY/releases/latest/download/install.sh)
 ```
 
 В опубликованном релизе `OWNER/REPOSITORY` уже заменён на настоящий адрес.

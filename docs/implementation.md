@@ -17,7 +17,10 @@ matrix is needed. The installer selects by OpenWrt family and verifies SHA-256.
 When installing the optional core, only that binary package needs architecture
 selection. The installer resolves stable native tags for the OpenWrt family,
 checks the exact architecture suffix, and verifies the GitHub asset digest if
-available. It does not select generic or prerelease packages. Existing UCI
+available. The filename architecture comes from OpenWrt's DISTRIB_ARCH,
+including CPU variants such as aarch64_cortex-a53; APK's generic ABI name
+is unsuitable for matching these assets. It does not select generic or
+prerelease packages. Existing UCI
 configuration is backed up and restored, including on package-manager failure.
 Installed and available versions are compared using the package manager's
 native comparator, including package revisions. Equal/newer installed versions
@@ -26,9 +29,11 @@ package metadata must match the selected version. The installer does not
 restart ByeDPI itself; the user can apply the new binary through Service → Restart.
 A failed restore retains the backup and reports its path. Consent is read from
 terminal stdin or /dev/tty, not from piped script contents.
+Downloads suppress progress output. Package index updates show a short status
+line on success and their full diagnostic output on failure.
 See [releases.md](releases.md) for the publication procedure.
 
-Users install or update with a single `sh <(wget -O - URL)` command, following
+Users install or update with a single `sh <(wget -q -O - URL)` command, following
 the documented [Podkop installation flow](https://github.com/itdoginfo/podkop#установка-podkop).
 Release preparation embeds the repository in the installer, and the publication
 workflow places a ready-to-copy command with the actual URL in the release
@@ -116,7 +121,7 @@ test doubles for mode switching, list widget selection and write preservation.
 They are not a browser or an installed LuCI environment.
 
 Executed locally: BusyBox ash syntax check, 15 backend integration tests,
-27 frontend checks, 51 release/installer tests, actionlint validation of all
+27 frontend checks, 56 release/installer tests, actionlint validation of all
 three workflows, and JSON parsing of menu/ACL files. The backend service
 tests substitute the init/procd boundary; the file editor tests use real UCI
 and jshn. No .ipk/.apk artifact was built in this environment.

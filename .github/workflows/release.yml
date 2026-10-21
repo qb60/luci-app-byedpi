@@ -94,27 +94,11 @@ jobs:
 
           repository = os.environ['GITHUB_REPOSITORY']
           commit = os.environ['GITHUB_SHA']
-          installer_url = f'https://github.com/{repository}/releases/latest/download/install.sh'
           readme_url = f'https://github.com/{repository}/blob/{commit}/README.md'
 
-          Path('release-notes.md').write_text(f'''## Установка и обновление
+          Path('release-notes.md').write_text(f'''[README]({readme_url})
 
-          Выполните в консоли роутера одну команду:
-
-          ```sh
-          sh <(wget -O - {installer_url})
-          ```
-
-          Если ByeDPI ещё не установлен, подтвердите его установку ответом `y`.
-          Подходящий пакет основного сервиса будет скачан из DPITrickster/ByeDPI-OpenWrt.
-          Если для установленного ByeDPI есть новая версия, скрипт предложит обновить его.
-          При отказе обновится только интерфейс. Настройки сохраняются. [Подробности]({readme_url}).
-
-          Команда всегда устанавливает последнюю стабильную версию интерфейса.
-          Пакет для OpenWrt 24.10 или 25.12 выбирается автоматически.
-          После установки откройте **Services → ByeDPI**.
-
-          Исходный коммит: `{commit}`.
+          Source commit: `{commit}`.
           ''')
           PYNOTES
 

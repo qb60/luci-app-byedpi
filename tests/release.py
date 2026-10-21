@@ -169,6 +169,7 @@ destination = arguments[arguments.index('--output') + 1]
 url = arguments[-1]
 with open(os.environ['INSTALLER_LOG'], 'a') as output:
     output.write('download ' + url + '\\n')
+    output.write('download-options ' + ' '.join(arguments[:-1]) + '\\n')
 source = Path(os.environ['FIXTURE_ASSETS']) / url.rsplit('/', 1)[-1]
 if destination == '-':
     sys.stdout.buffer.write(source.read_bytes())
@@ -236,7 +237,11 @@ printf '%s %s\\n' "${0##*/}" "$*" >> "$INSTALLER_LOG"
 if [ "$1" = print-architecture ]; then
     printf 'arch all 1\\narch %s 10\\n' "$TEST_ARCHITECTURE"
 elif [ "$1" = --print-arch ]; then
-    printf '%s\\n' "$TEST_ARCHITECTURE"
+    printf '%s\\n' "${TEST_APK_ARCHITECTURE:-$TEST_ARCHITECTURE}"
+elif [ "$1" = update ]; then
+    printf 'repository index download\\n'
+    printf 'package index summary\\n' >&2
+    exit "${UPDATE_EXIT:-0}"
 elif [ "$1" = status ] || [ "$1" = info ]; then
     version=
     [ ! -f "$TEST_CORE_VERSION" ] || version=$(cat "$TEST_CORE_VERSION")
@@ -402,6 +407,33 @@ fi
         self.installer.write_text(source)
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('download-options -q -O', self.log.read_text())
+
+    def test_curl_disables_progress_but_keeps_errors(self):
+        result = self.run_installer()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('--silent --show-error', self.log.read_text())
+
+    def test_successful_index_update_hides_repository_output(self):
+        for version in ('24.10.5', '25.12.5'):
+            with self.subTest(version=version):
+                self.configure(version)
+                result = self.run_installer()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('Updating package lists...', result.stdout)
+                self.assertNotIn('repository index download', result.stdout + result.stderr)
+                self.assertNotIn('package index summary', result.stdout + result.stderr)
+
+    def test_failed_index_update_shows_diagnostics_and_stops(self):
+        self.env['UPDATE_EXIT'] = '3'
+        for version in ('24.10.5', '25.12.5'):
+            with self.subTest(version=version):
+                self.configure(version)
+                result = self.run_installer()
+                self.assertEqual(result.returncode, 3)
+                self.assertIn('repository index download', result.stderr)
+                self.assertIn('package index summary', result.stderr)
+                self.assert_not_installed(result)
 
     def test_missing_download_prevents_installation(self):
         self.package.unlink()
@@ -427,7 +459,7 @@ fi
 
         return self.run_command([
             'busybox', 'ash', '-c',
-            'sh <(wget -O - https://github.com/example/luci-app-byedpi/releases/latest/download/install.sh)',
+            'sh <(wget -q -O - https://github.com/example/luci-app-byedpi/releases/latest/download/install.sh)',
         ], answer)
 
     def test_one_line_installation_without_arguments(self):
@@ -456,14 +488,21 @@ fi
         self.assertEqual(self.config.stat().st_mode & 0o777, 0o640)
         self.assertEqual(log.count('opkg update'), 1)
 
-    def test_core_apk_uses_the_package_manager_architecture(self):
+    def test_core_apk_uses_openwrt_cpu_variant_instead_of_generic_abi(self):
         self.configure(version='25.12.0')
         self.prepare_core(family='25.12', architecture='aarch64_cortex-a53')
-        # For APK the package manager provides the authoritative architecture.
-        self.release_file.write_text("DISTRIB_RELEASE='25.12.0'\n")
+        self.env['TEST_APK_ARCHITECTURE'] = 'aarch64'
         result = self.run_installer(answer='y\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('aarch64_cortex-a53.apk', self.log.read_text())
+
+    def test_core_apk_requires_openwrt_architecture_metadata(self):
+        self.configure(version='25.12.5')
+        self.prepare_core(family='25.12', architecture='aarch64_cortex-a53')
+        self.release_file.write_text("DISTRIB_RELEASE='25.12.5'\n")
+        result = self.run_installer(answer='y\n')
+        self.assert_not_installed(result)
+        self.assertIn('architecture from OpenWrt metadata', result.stderr)
 
     def test_fresh_core_installation_creates_the_default_configuration(self):
         self.prepare_core()
@@ -603,6 +642,20 @@ esac
         self.assertIn('apk info -e -v byedpi', self.log.read_text())
         self.assertIn('apk version -t 0.17.3-r1 0.17.2-r1', self.log.read_text())
         self.assertIn('apk add --allow-untrusted --upgrade', self.log.read_text())
+
+    def test_apk_update_finds_the_router_cpu_variant(self):
+        self.configure(version='25.12.5')
+        self.prepare_core(family='25.12', architecture='aarch64_cortex-a53')
+        self.service.write_text('#!/bin/sh\nexit 0\n')
+        self.service.chmod(0o755)
+        Path(self.env['TEST_CORE_VERSION']).write_text('0.17.2-r1')
+        self.env['TEST_APK_ARCHITECTURE'] = 'aarch64'
+        original = self.config.read_bytes()
+        result = self.run_installer(answer='y\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('0.17.2-r1 -> 0.17.3-r1', result.stdout)
+        self.assertIn(self.core_filename, self.log.read_text())
+        self.assertEqual(self.config.read_bytes(), original)
 
     def test_no_terminal_skips_update_but_keeps_installing_the_interface(self):
         self.prepare_update()

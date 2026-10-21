@@ -43,9 +43,9 @@ download() {
     destination=$2
 
     if command -v curl >/dev/null 2>&1; then
-        curl --fail --location --retry 3 --output "$destination" "$download_url"
+        curl --fail --silent --show-error --location --retry 3 --output "$destination" "$download_url"
     elif command -v wget >/dev/null 2>&1; then
-        wget -O "$destination" "$download_url"
+        wget -q -O "$destination" "$download_url"
     else
         fail 'Install wget or curl with HTTPS support first.'
     fi
@@ -81,8 +81,14 @@ confirm_core_installation() {
 
 update_package_lists() {
     [ "$package_lists_updated" = 0 ] || return 0
-    "$package_manager" update || return $?
-    package_lists_updated=1
+    printf 'Updating package lists...\n'
+    if "$package_manager" update > "$temporary_directory/package-update.log" 2>&1; then
+        package_lists_updated=1
+    else
+        update_status=$?
+        cat "$temporary_directory/package-update.log" >&2
+        return "$update_status"
+    fi
 }
 
 install_package() {
@@ -95,18 +101,16 @@ install_package() {
 }
 
 resolve_byedpi_package() {
-    # Only the machine-code package needs architecture selection.
-    if [ "$package_manager" = apk ]; then
-        architecture=$(apk --print-arch) || fail 'Unable to determine the APK architecture.'
-    else
-        architecture=${DISTRIB_ARCH:-}
+    # Release filenames use OpenWrt's CPU variant, not APK's generic ABI name.
+    architecture=${DISTRIB_ARCH:-}
+    printf '%s\n' "$architecture" | grep -Eq '^[A-Za-z0-9_-]+$' ||
+        fail 'Unable to determine the ByeDPI package architecture from OpenWrt metadata.'
+
+    if [ "$package_manager" = opkg ]; then
         opkg print-architecture | awk -v architecture="$architecture" \
             '$1 == "arch" && $2 == architecture { found = 1 } END { exit !found }' ||
             fail 'OpenWrt metadata and opkg architecture disagree.'
     fi
-
-    printf '%s\n' "$architecture" | grep -Eq '^[A-Za-z0-9_-]+$' || fail 'Unable to determine the ByeDPI package architecture.'
-
 
     api_url="https://api.github.com/repos/$CORE_REPOSITORY"
     download "$api_url/releases?per_page=100" "$temporary_directory/core-releases.json" ||

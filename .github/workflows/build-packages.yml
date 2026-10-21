@@ -23,6 +23,7 @@ jobs:
           busybox ash -n scripts/install.sh
           busybox ash -n luci-app-byedpi/root/usr/libexec/rpcd/luci.byedpi
           python3 tests/release.py
+          python3 tests/git-next.py
       - name: Check frontend logic
         run: |
           node --input-type=module <<'JS'

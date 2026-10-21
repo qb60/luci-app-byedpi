@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag matching PKG_VERSION, for example v1.0.0'
+        description: 'Release tag matching PKG_VERSION and optional PKG_RELEASE, e.g. v0.0.1-r2'
         required: true
         type: string
 
@@ -40,9 +40,12 @@ jobs:
           tag = os.environ['RELEASE_TAG']
           makefile = Path('luci-app-byedpi/Makefile').read_text()
           version = re.search(r'^PKG_VERSION:=(.+)$', makefile, re.MULTILINE).group(1)
+          revision = re.search(r'^PKG_RELEASE:=(.+)$', makefile, re.MULTILINE).group(1)
+          version_tag = f'v{version}'
+          revision_tag = f'{version_tag}-r{revision}'
 
-          if not re.fullmatch(r'v\d+\.\d+\.\d+', tag) or tag != 'v' + version:
-              raise SystemExit(f'Tag {tag!r} must equal v{version} from Makefile')
+          if not re.fullmatch(r'v\d+\.\d+\.\d+(-r[1-9]\d*)?', tag) or tag not in (version_tag, revision_tag):
+              raise SystemExit(f'Tag {tag!r} must equal {version_tag} or {revision_tag} from Makefile')
 
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'tag={tag}\n')

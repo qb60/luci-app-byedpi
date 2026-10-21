@@ -8,6 +8,7 @@ from pathlib import Path
 import pty
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -122,6 +123,36 @@ class ReleaseTests(unittest.TestCase):
         self.record_path.write_text(json.dumps(self.completed))
         with self.assertRaisesRegex(ValueError, 'Invalid package filename'):
             self.prepare()
+
+
+class ReleaseTagTests(unittest.TestCase):
+    def validate(self, tag):
+        workflow = Path('.github/workflows/release.yml').read_text()
+        source = textwrap.dedent(workflow.split("python3 - <<'PY'\n", 1)[1].split('          PY\n', 1)[0])
+        with tempfile.TemporaryDirectory(prefix='byedpi-release-tag-') as directory:
+            root = Path(directory)
+            (root / 'luci-app-byedpi').mkdir()
+            (root / 'luci-app-byedpi/Makefile').write_text('PKG_VERSION:=0.0.1\nPKG_RELEASE:=2\n')
+            output = root / 'output'
+            result = subprocess.run(['python3', '-c', source], cwd=root,
+                                    env=dict(os.environ, RELEASE_TAG=tag, GITHUB_OUTPUT=str(output)),
+                                    capture_output=True, text=True, timeout=10)
+            return result, output.read_text() if output.exists() else ''
+
+    def test_version_and_matching_revision_tags_are_accepted(self):
+        for tag in ('v0.0.1', 'v0.0.1-r2'):
+            with self.subTest(tag=tag):
+                result, output = self.validate(tag)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output, f'tag={tag}\n')
+
+    def test_incorrect_version_or_revision_is_rejected(self):
+        for tag in ('v0.0.2', 'v0.0.1-r1', 'v0.0.1-r0', 'v0.0.1-r2-extra'):
+            with self.subTest(tag=tag):
+                result, output = self.validate(tag)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('must equal', result.stderr)
+                self.assertEqual(output, '')
 
 
 class InstallerTests(unittest.TestCase):
@@ -368,6 +399,10 @@ fi
         self.assertEqual(self.run_installer('v1.0.0').returncode, 0)
         self.assertIn('/releases/download/v1.0.0/', self.log.read_text())
 
+    def test_specific_revision_tag(self):
+        self.assertEqual(self.run_installer('v1.0.0-r2').returncode, 0)
+        self.assertIn('/releases/download/v1.0.0-r2/', self.log.read_text())
+
     def test_checksum_mismatch_prevents_installation(self):
         self.package.write_bytes(b'corrupted download')
         self.assert_not_installed(self.run_installer())
@@ -596,6 +631,8 @@ esac
         result = self.run_installer(answer='y\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('0.17.2-r1 -> 0.17.3-r1', result.stdout)
+        self.assertIn('Installed ByeDPI version: 0.17.2-r1', result.stdout)
+        self.assertIn('Latest compatible ByeDPI version: 0.17.3-r1', result.stdout)
         self.assertEqual(Path(self.env['TEST_CORE_VERSION']).read_text(), '0.17.3-r1')
         self.assertEqual(self.config.read_bytes(), original)
         self.assertIn('opkg compare-versions 0.17.3-r1 >> 0.17.2-r1', self.log.read_text())
@@ -616,17 +653,24 @@ esac
         self.assertNotIn(self.core_filename, self.log.read_text())
 
     def test_current_core_is_not_reinstalled(self):
-        self.prepare_update(installed_version='0.17.3-r1')
-        result = self.run_installer()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn('Update?', result.stdout)
-        self.assertNotIn(self.core_filename, self.log.read_text())
+        for family in ('24.10', '25.12'):
+            with self.subTest(family=family):
+                self.prepare_update(installed_version='0.17.3-r1', family=family)
+                result = self.run_installer()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('Checking installed ByeDPI...', result.stdout)
+                self.assertIn('Installed ByeDPI version: 0.17.3-r1', result.stdout)
+                self.assertIn('Latest compatible ByeDPI version: 0.17.3-r1', result.stdout)
+                self.assertIn('ByeDPI versions match. No update is needed.', result.stdout)
+                self.assertNotIn('Update?', result.stdout)
+                self.assertNotIn(self.core_filename, self.log.read_text())
 
     def test_newer_installed_core_is_not_downgraded(self):
         self.prepare_update(installed_version='0.17.10-r1')
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn('Update?', result.stdout)
+        self.assertIn('Installed ByeDPI is newer than the repository version. No update is needed.', result.stdout)
         self.assertNotIn(self.core_filename, self.log.read_text())
 
     def test_package_revision_update_is_offered(self):

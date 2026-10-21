@@ -203,11 +203,15 @@ core_version_matches() {
 }
 
 check_core_update() {
+    printf 'Checking installed ByeDPI...\n'
     installed_version=$(installed_core_version)
     if [ -z "$installed_version" ]; then
         printf 'Unable to determine the installed ByeDPI version; skipping its update check.\n'
         return 0
     fi
+
+    printf 'Installed ByeDPI version: %s\n' "$installed_version"
+    printf 'Checking the latest compatible ByeDPI release...\n'
 
     ensure_jsonfilter
     # A failed optional update lookup must not block the LuCI installation.
@@ -222,6 +226,7 @@ check_core_update() {
     load_core_package
     available_version=${core_filename#byedpi_}
     available_version=${available_version%_"$architecture"."$package_extension"}
+    printf 'Latest compatible ByeDPI version: %s\n' "$available_version"
 
     if core_version_matches "$available_version" gt "$installed_version"; then
         printf 'ByeDPI update available: %s -> %s. Update? [y/N]: ' "$installed_version" "$available_version"
@@ -231,6 +236,12 @@ check_core_update() {
         else
             printf 'ByeDPI update skipped. Continuing with the LuCI interface.\n'
         fi
+    elif core_version_matches "$available_version" eq "$installed_version"; then
+        printf 'ByeDPI versions match. No update is needed.\n'
+    elif core_version_matches "$installed_version" gt "$available_version"; then
+        printf 'Installed ByeDPI is newer than the repository version. No update is needed.\n'
+    else
+        printf 'Unable to compare ByeDPI versions; keeping the installed version.\n'
     fi
 }
 
@@ -286,8 +297,8 @@ install_byedpi() {
 printf '%s\n' "$repository" | grep -Eq '^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$' ||
     fail 'Specify the GitHub repository: sh install.sh OWNER/REPOSITORY [RELEASE_TAG]'
 
-printf '%s\n' "$release_tag" | grep -Eq '^(latest|v[0-9]+\.[0-9]+\.[0-9]+)$' ||
-    fail 'The release tag must be latest or vMAJOR.MINOR.PATCH.'
+printf '%s\n' "$release_tag" | grep -Eq '^(latest|v[0-9]+\.[0-9]+\.[0-9]+(-r[1-9][0-9]*)?)$' ||
+    fail 'The release tag must be latest, vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rN.'
 
 [ -r /etc/openwrt_release ] || fail 'This system does not provide /etc/openwrt_release.'
 . /etc/openwrt_release
